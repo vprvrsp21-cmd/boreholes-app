@@ -1,7 +1,49 @@
+const MAP_VIEW_STORAGE_KEY = "boreholes-app:map-view";
+const DEFAULT_MAP_VIEW = {
+  lat: 49.5883,
+  lng: 34.5514,
+  zoom: 10
+};
+
+function getSavedMapView() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MAP_VIEW_STORAGE_KEY) || "null");
+    const lat = Number(saved?.lat);
+    const lng = Number(saved?.lng);
+    const zoom = Number(saved?.zoom);
+
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Number.isFinite(zoom) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180 &&
+      zoom >= 4 &&
+      zoom <= 20
+    ) {
+      return { lat, lng, zoom };
+    }
+  } catch (e) {
+    console.log("Map view load error:", e);
+  }
+
+  return DEFAULT_MAP_VIEW;
+}
+
+function isTouchMapDevice() {
+  return Boolean(L.Browser.touch || window.matchMedia?.("(pointer: coarse)")?.matches);
+}
+
+const savedMapView = getSavedMapView();
+
 // 🗺 карта
 const map = L.map('map', {
-  markerZoomAnimation: false
-}).setView([49.5883, 34.5514], 10);
+  markerZoomAnimation: false,
+  zoomAnimation: !isTouchMapDevice(),
+  fadeAnimation: !isTouchMapDevice()
+}).setView([savedMapView.lat, savedMapView.lng], savedMapView.zoom);
 
 const POLTAVA_CENTER = {
   lat: 49.5883,
@@ -843,6 +885,29 @@ function changeWeatherDate(value) {
 function refreshWeather() {
   loadWeather(lastWeatherPoint.lat, lastWeatherPoint.lng, lastWeatherPoint.label, true);
 }
+
+let mapViewSaveTimer = null;
+
+function saveCurrentMapViewNow() {
+  try {
+    const center = map.getCenter();
+    localStorage.setItem(MAP_VIEW_STORAGE_KEY, JSON.stringify({
+      lat: Number(center.lat.toFixed(6)),
+      lng: Number(center.lng.toFixed(6)),
+      zoom: map.getZoom()
+    }));
+  } catch (e) {
+    console.log("Map view save error:", e);
+  }
+}
+
+function saveCurrentMapView() {
+  clearTimeout(mapViewSaveTimer);
+  mapViewSaveTimer = setTimeout(saveCurrentMapViewNow, 250);
+}
+
+map.on("moveend zoomend", saveCurrentMapView);
+window.addEventListener("beforeunload", saveCurrentMapViewNow);
 
 async function refreshMap() {
   const center = map.getCenter();
