@@ -309,7 +309,6 @@ function getBoreholeMarkerColor(data) {
 
 function createBoreholeIcon(data = {}) {
   const color = getBoreholeMarkerColor(data);
-  const compactTouchIcon = isTouchMapDevice();
 
   return L.divIcon({
   className: "borehole-marker",
@@ -318,9 +317,9 @@ function createBoreholeIcon(data = {}) {
       <span class="borehole-pin-core"></span>
     </span>
   `,
-  iconSize: compactTouchIcon ? [20, 20] : [24, 32],
-  iconAnchor: compactTouchIcon ? [10, 10] : [12, 30],
-  popupAnchor: compactTouchIcon ? [0, -12] : [0, -32]
+  iconSize: [24, 32],
+  iconAnchor: [12, 30],
+  popupAnchor: [0, -32]
   });
 }
 
