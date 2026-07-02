@@ -297,11 +297,20 @@ html {
   }
 
   .borehole-pin {
-    box-shadow: 0 2px 7px rgba(18, 47, 84, 0.22);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    transform: none;
+    box-shadow: none;
   }
 
   .borehole-pin::after {
     display: none;
+  }
+
+  .borehole-pin-core {
+    width: 7px;
+    height: 7px;
   }
 }
 

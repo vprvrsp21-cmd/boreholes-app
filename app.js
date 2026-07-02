@@ -309,6 +309,8 @@ function getBoreholeMarkerColor(data) {
 
 function createBoreholeIcon(data = {}) {
   const color = getBoreholeMarkerColor(data);
+  const compactTouchIcon = isTouchMapDevice();
+
   return L.divIcon({
   className: "borehole-marker",
   html: `
@@ -316,9 +318,9 @@ function createBoreholeIcon(data = {}) {
       <span class="borehole-pin-core"></span>
     </span>
   `,
-  iconSize: [24, 32],
-  iconAnchor: [12, 30],
-  popupAnchor: [0, -32]
+  iconSize: compactTouchIcon ? [20, 20] : [24, 32],
+  iconAnchor: compactTouchIcon ? [10, 10] : [12, 30],
+  popupAnchor: compactTouchIcon ? [0, -12] : [0, -32]
   });
 }
 
@@ -1854,8 +1856,19 @@ function addMarker(data) {
   const markerId = getBoreholeMarkerId(data);
   const existing = boreholeMarkers.get(markerId);
 
-  if (existing && map.hasLayer(existing.marker)) {
-    map.removeLayer(existing.marker);
+  if (existing) {
+    Object.assign(existing.data, data);
+    existing.marker.setLatLng([existing.data.lat, existing.data.lng]);
+    existing.marker.setIcon(createBoreholeIcon(existing.data));
+    existing.marker.setPopupContent(getBoreholePopupHtml(existing.data));
+
+    if (shouldShowBorehole(existing.data) && !map.hasLayer(existing.marker)) {
+      existing.marker.addTo(map);
+    } else if (!shouldShowBorehole(existing.data) && map.hasLayer(existing.marker)) {
+      map.removeLayer(existing.marker);
+    }
+
+    return existing.marker;
   }
 
   const marker = L.marker([data.lat, data.lng], { icon: createBoreholeIcon(data) });
@@ -1932,6 +1945,22 @@ function addMarker(data) {
   });
 
   marker.bindPopup(getBoreholePopupHtml(data));
+  return marker;
+}
+
+function renderBoreholeMarkers(items) {
+  const activeMarkerIds = new Set(items.map(getBoreholeMarkerId));
+
+  boreholeMarkers.forEach(({ marker }, markerId) => {
+    if (!activeMarkerIds.has(markerId)) {
+      if (map.hasLayer(marker)) {
+        map.removeLayer(marker);
+      }
+      boreholeMarkers.delete(markerId);
+    }
+  });
+
+  items.forEach(addMarker);
 }
 
 // 🗑 видалення
@@ -3387,8 +3416,10 @@ async function syncNormalizedFirebaseBoreholes(originalItems, normalizedItems) {
 }
 
 async function loadBoreholes() {
-  clearBoreholeMarkers();
-  boreholes = loadLocalBoreholes();
+  boreholes = dedupeBoreholes(loadLocalBoreholes()).map(normalizeBoreholePlaceDisplay);
+  renderBoreholeMarkers(boreholes);
+  refreshYearFilterOptions();
+  applyYearFilter();
 
   if (isFirebaseReady()) {
     try {
@@ -3418,7 +3449,7 @@ async function loadBoreholes() {
 
   boreholes = dedupeBoreholes(boreholes).map(normalizeBoreholePlaceDisplay);
   saveLocalBoreholes();
-  boreholes.forEach(addMarker);
+  renderBoreholeMarkers(boreholes);
   refreshYearFilterOptions();
   applyYearFilter();
 }
