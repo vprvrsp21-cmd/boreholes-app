@@ -18,11 +18,11 @@ body {
   overflow: hidden;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #dceeff;
+  background: #f7fbff;
 }
 
 html {
-  background: #dceeff;
+  background: #f7fbff;
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
@@ -33,7 +33,7 @@ html {
     right: 0;
     bottom: 0;
     height: env(safe-area-inset-bottom);
-    background: #dceeff;
+    background: #f7fbff;
     pointer-events: none;
     z-index: 5000;
   }

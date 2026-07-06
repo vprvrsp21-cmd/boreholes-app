@@ -1175,8 +1175,41 @@ function togglePanelSection(id, trigger) {
   setPanelSectionCollapsed(id, trigger, !panel.classList.contains("collapsed"));
 }
 
+function isQrOpenMode() {
+  return new URLSearchParams(window.location.search).get("qr") === "1";
+}
+
+function setSidebarOpen(open) {
+  const sidebar = document.getElementById("sidebar");
+  const handle = document.querySelector(".drawer-handle.left");
+  if (!sidebar) return;
+
+  sidebar.classList.toggle("open", open);
+
+  if (handle) {
+    handle.textContent = open ? "❮" : "❯";
+  }
+}
+
+function openQrStartView() {
+  if (!isQrOpenMode()) return;
+
+  setSidebarOpen(true);
+  setPanelSectionCollapsed(
+    "calculatorPanel",
+    document.querySelector("[onclick*='calculatorPanel']"),
+    false
+  );
+  setPanelSectionCollapsed(
+    "weatherBox",
+    document.querySelector("[onclick*='weatherBox']"),
+    false
+  );
+}
+
 function initMobileCollapsibleSections() {
   if (!window.matchMedia("(max-width: 768px)").matches) return;
+  if (isQrOpenMode()) return;
 
   setPanelSectionCollapsed(
     "calculatorPanel",
@@ -2415,7 +2448,7 @@ function setTheme(isDark) {
     themeButton.setAttribute("aria-pressed", document.body.classList.contains("dark") ? "true" : "false");
   }
 
-  const themeColor = document.body.classList.contains("dark") ? "#363d46" : "#dceeff";
+  const themeColor = document.body.classList.contains("dark") ? "#363d46" : "#f7fbff";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   document.querySelector('meta[name="msapplication-navbutton-color"]')?.setAttribute("content", themeColor);
 }
@@ -3408,7 +3441,7 @@ function downloadEstimatePdf() {
   const distanceKm = getFieldNumber("distance");
   const distance = distanceKm ? `${formatDecimalComma(distanceKm, 2)} км` : "-";
   const date = new Date().toLocaleDateString("uk-UA");
-  const appUrl = "https://pro-buryty-v-vodonos.github.io/boreholes-app/";
+  const appUrl = "https://pro-buryty-v-vodonos.github.io/boreholes-app/?qr=1";
   const youtubeUrl = "https://www.youtube.com/@PRO_buryty_v_vodonos";
   const telegramUrl = "https://t.me/PRO_buryty_v_Vodonos";
   const youtubeIcon = `
@@ -3563,6 +3596,7 @@ window.addEventListener("load", function () {
   calculateCost();
   updateDebitResult();
   initMobileCollapsibleSections();
+  openQrStartView();
 
   // textarea note
   const note = document.getElementById("note");
