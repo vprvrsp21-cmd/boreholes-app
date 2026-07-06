@@ -186,10 +186,11 @@ let lastWeatherDayIndex = 0;
 let isAdmin = false;
 let accessClosed = false;
 let userLocationMarker = null;
-let activeYearFilter = "all";
 let installPromptEvent = null;
 const boreholeMarkers = new Map();
 const LOCAL_BOREHOLES_KEY = "boreholes-app:boreholes";
+const YEAR_FILTER_STORAGE_KEY = "boreholes-app:year-filter";
+let activeYearFilter = getSavedYearFilter();
 const CITY_SETTLEMENTS = new Set([
   "полтава",
   "кременчук",
@@ -233,6 +234,9 @@ const ADMIN_MARKER_COLORS = [
 ];
 const PRIMARY_ADMIN_EMAIL_KEY = "boreholes-app:primary-admin-email";
 const THEME_STORAGE_KEY = "boreholes-app:theme";
+const DEFAULT_OWNER_EMAIL = "semikozoleg@gmail.com";
+const OWNER_MIGRATION_STORAGE_KEY = "boreholes-app:owner-migration-20260706-8";
+const OWNER_MIGRATION_CUTOFF = Date.parse("2026-07-06T20:15:46+03:00");
 
 function getCurrentAdminUser() {
   return window.firebaseAuth?.currentUser || null;
@@ -291,6 +295,98 @@ function getBoreholeAdminKey(data) {
     data?.createdBy ||
     ""
   );
+}
+
+function isOwnBorehole(data) {
+  const currentAdminEmail = getCurrentAdminEmail();
+  const boreholeAdminEmail = getBoreholeAdminKey(data);
+
+  if (!currentAdminEmail) return false;
+  if (!boreholeAdminEmail) return currentAdminEmail === normalizeAdminEmail(DEFAULT_OWNER_EMAIL);
+
+  return boreholeAdminEmail === currentAdminEmail;
+}
+
+function requireOwnBorehole(data, actionText = "змінювати") {
+  if (isOwnBorehole(data)) return true;
+
+  alert(`Цю точку створив інший адмін. Можна ${actionText} тільки свої точки.`);
+  return false;
+}
+
+function getOwnerPatch(ownerEmail) {
+  const normalizedEmail = normalizeAdminEmail(ownerEmail);
+  const currentUid = getCurrentAdminUid();
+
+  return {
+    adminEmail: normalizedEmail,
+    createdByEmail: normalizedEmail,
+    updatedByEmail: normalizedEmail,
+    ...(currentUid ? {
+      createdByUid: currentUid,
+      updatedByUid: currentUid
+    } : {}),
+    ownershipFixedAt: Date.now()
+  };
+}
+
+function isBeforeOwnerMigrationCutoff(data) {
+  const createdAt = Number(data?.createdAt || data?.created || data?.timestamp || 0);
+  return !Number.isFinite(createdAt) || createdAt <= 0 || createdAt <= OWNER_MIGRATION_CUTOFF;
+}
+
+function needsOwnerMigration(data, ownerEmail = DEFAULT_OWNER_EMAIL) {
+  return isBeforeOwnerMigrationCutoff(data) &&
+    getBoreholeAdminKey(data) !== normalizeAdminEmail(ownerEmail);
+}
+
+function wasOwnerMigrationDone() {
+  try {
+    return localStorage.getItem(OWNER_MIGRATION_STORAGE_KEY) === "done";
+  } catch (e) {
+    return false;
+  }
+}
+
+function markOwnerMigrationDone() {
+  try {
+    localStorage.setItem(OWNER_MIGRATION_STORAGE_KEY, "done");
+  } catch (e) {
+    console.log("Owner migration flag error:", e);
+  }
+}
+
+async function claimExistingBoreholesForDefaultOwner() {
+  const ownerEmail = normalizeAdminEmail(DEFAULT_OWNER_EMAIL);
+  if (!isAdmin || getCurrentAdminEmail() !== ownerEmail || wasOwnerMigrationDone()) return;
+
+  const ownerPatch = getOwnerPatch(ownerEmail);
+  const itemsToClaim = boreholes.filter(item => needsOwnerMigration(item, ownerEmail));
+  if (!itemsToClaim.length) {
+    markOwnerMigrationDone();
+    return;
+  }
+
+  let hasFirebaseErrors = false;
+
+  for (const item of itemsToClaim) {
+    Object.assign(item, ownerPatch);
+
+    if (isFirebaseReady() && hasFirebaseId(item.id)) {
+      try {
+        await firebaseUpdateDoc(firebaseDoc(db, "boreholes", item.id), ownerPatch);
+      } catch (error) {
+        hasFirebaseErrors = true;
+        console.log("Owner migration error:", error);
+      }
+    }
+  }
+
+  saveLocalBoreholes();
+
+  if (!hasFirebaseErrors) {
+    markOwnerMigrationDone();
+  }
 }
 
 function getBoreholeMarkerColor(data) {
@@ -451,7 +547,25 @@ function getBoreholesByYear(year = activeYearFilter) {
 }
 
 function shouldShowBorehole(data) {
+  if (!isAdmin) return true;
   return matchesYearFilter(data);
+}
+
+function getSavedYearFilter() {
+  try {
+    return localStorage.getItem(YEAR_FILTER_STORAGE_KEY) || "all";
+  } catch (e) {
+    console.log("Year filter load error:", e);
+    return "all";
+  }
+}
+
+function saveYearFilter(value) {
+  try {
+    localStorage.setItem(YEAR_FILTER_STORAGE_KEY, value || "all");
+  } catch (e) {
+    console.log("Year filter save error:", e);
+  }
 }
 
 function clearBoreholeMarkers() {
@@ -541,7 +655,15 @@ function refreshYearFilterOptions() {
     filterOptions.push({ value: year, label: year });
   });
 
-  if (hasBefore2022) {
+  if (current && current !== "all" && current !== "before-2022" && !years.includes(current)) {
+    const option = document.createElement("option");
+    option.value = current;
+    option.textContent = current;
+    select.appendChild(option);
+    filterOptions.push({ value: current, label: current });
+  }
+
+  if (hasBefore2022 || current === "before-2022") {
     const option = document.createElement("option");
     option.value = "before-2022";
     option.textContent = "до 2022";
@@ -549,10 +671,7 @@ function refreshYearFilterOptions() {
     filterOptions.push({ value: "before-2022", label: "до 2022" });
   }
 
-  activeYearFilter =
-    current === "before-2022" || (current !== "all" && years.includes(current))
-      ? current
-      : "all";
+  activeYearFilter = current || "all";
   select.value = activeYearFilter;
   renderYearFilterMenu(filterOptions);
   updateYearFilterCount();
@@ -560,6 +679,7 @@ function refreshYearFilterOptions() {
 
 function setYearFilter(year) {
   activeYearFilter = year || "all";
+  saveYearFilter(activeYearFilter);
   const select = document.getElementById("yearFilter");
   if (select) select.value = activeYearFilter;
   document.querySelectorAll(".year-filter-option").forEach(option => {
@@ -1098,6 +1218,7 @@ function setAdminUI(user) {
     boreholeMarkers.forEach(({ marker, data }) => {
       marker.setIcon(createBoreholeIcon(data));
     });
+    applyYearFilter();
   }
 }
 
@@ -1515,11 +1636,15 @@ function getPlaceFromForm() {
     placeLabel: label
   });
   const manualDistrict = isPoltava ? getPoltavaDistrictFromLabel(label) : "";
+  const labelMainName = getMainPlaceText(label);
+  const visiblePlaceName = isPoltava
+    ? "Полтава"
+    : (labelMainName || rawPlaceName);
 
   return {
     ...place,
-    name: rawPlaceName || (isPoltava ? "Полтава" : ""),
-    placeName: rawPlaceName || (isPoltava ? "Полтава" : ""),
+    name: visiblePlaceName,
+    placeName: visiblePlaceName,
     district: manualDistrict || place.district,
     label
   };
@@ -1556,7 +1681,7 @@ function setPlaceUI(place) {
       label,
       placeLabel: label
     };
-    const canEditPlaceLabel = manualRequired || (Boolean(label) && isPoltavaCityPlace(editablePlace));
+    const canEditPlaceLabel = isAdmin && (manualRequired || Boolean(label) || Boolean(name));
 
     placeLabel.value = label || "";
     placeLabel.readOnly = !canEditPlaceLabel;
@@ -1564,7 +1689,7 @@ function setPlaceUI(place) {
     placeLabel.title = canEditPlaceLabel
       ? (manualRequired
         ? "Впиши населений пункт вручну, наприклад: с. Новоселівка (дачі)"
-        : "Можна вручну дописати район: м. Полтава (Лісок)")
+        : "Можна вручну уточнити населений пункт або район")
       : "";
   }
   if (placeName) placeName.value = name || "";
@@ -1962,6 +2087,12 @@ function renderBoreholeMarkers(items) {
   items.forEach(addMarker);
 }
 
+function getStoredMarkerForBorehole(id, data) {
+  return boreholeMarkers.get(String(id || "")) ||
+    boreholeMarkers.get(getBoreholeMarkerId(data)) ||
+    Array.from(boreholeMarkers.values()).find(item => item.data?.id === id);
+}
+
 // 🗑 видалення
 async function deleteSelected() {
   // 🟡 видалення тимчасової точки
@@ -1976,13 +2107,23 @@ async function deleteSelected() {
   if (selectedMarker && selectedId) {
     try {
       const removed = boreholes.find(b => b.id === selectedId);
+      if (!removed) return;
+      if (!requireOwnBorehole(removed, "видаляти")) return;
+
       if (isFirebaseReady() && hasFirebaseId(selectedId)) {
         await firebaseDeleteDoc(
           firebaseDoc(db, "boreholes", selectedId)
         );
       }
 
-      map.removeLayer(selectedMarker);
+      const storedMarker = getStoredMarkerForBorehole(selectedId, removed);
+      const markerToRemove = storedMarker?.marker || selectedMarker;
+      if (markerToRemove && map.hasLayer(markerToRemove)) {
+        map.removeLayer(markerToRemove);
+      }
+      if (storedMarker) {
+        boreholeMarkers.delete(getBoreholeMarkerId(storedMarker.data));
+      }
       boreholeMarkers.delete(selectedId);
       boreholes = boreholes.filter(
         b => b.id !== selectedId
@@ -2073,6 +2214,7 @@ async function updateBorehole() {
 
   let b = boreholes.find(x => x.id === selectedId);
   if (!b) return;
+  if (!requireOwnBorehole(b, "оновлювати")) return;
 
   const place = getPlaceFromForm();
   const debitData = getDebitDataFromForm();
@@ -2087,6 +2229,7 @@ async function updateBorehole() {
     placeName: place.placeName || "",
     community: place.community || "",
     district: place.district || "",
+    neighbourhood: place.neighbourhood || place.neighborhood || place.suburb || "",
     placeLabel: place.label || "",
     debitVolumeLiters: debitData.volumeLiters,
     debitFillSeconds: debitData.seconds,
@@ -2109,9 +2252,12 @@ async function updateBorehole() {
     }
 
     // 🔵 оновлюємо локально
-    Object.assign(b, updatedData);
+    Object.assign(b, normalizeBoreholePlaceDisplay({
+      ...b,
+      ...updatedData
+    }));
     saveLocalBoreholes();
-    const storedMarker = boreholeMarkers.get(selectedId);
+    const storedMarker = getStoredMarkerForBorehole(selectedId, b);
     if (storedMarker) {
       storedMarker.data = b;
       storedMarker.marker.setIcon(createBoreholeIcon(b));
@@ -2130,9 +2276,12 @@ async function updateBorehole() {
 
   } catch (e) {
     console.log("Update error:", e);
-    Object.assign(b, updatedData);
+    Object.assign(b, normalizeBoreholePlaceDisplay({
+      ...b,
+      ...updatedData
+    }));
     saveLocalBoreholes();
-    const storedMarker = boreholeMarkers.get(selectedId);
+    const storedMarker = getStoredMarkerForBorehole(selectedId, b);
     if (storedMarker) {
       storedMarker.data = b;
       storedMarker.marker.setIcon(createBoreholeIcon(b));
@@ -2140,6 +2289,12 @@ async function updateBorehole() {
     }
     refreshYearFilterOptions();
     applyYearFilter();
+    renderPlaceStats(b);
+
+    if (selectedMarker) {
+      selectedMarker.setPopupContent(getBoreholePopupHtml(b));
+    }
+
     alert("Firebase не відповів, але зміни збережено локально");
   }
 }
@@ -2207,7 +2362,7 @@ function setTheme(isDark) {
     themeButton.setAttribute("aria-pressed", document.body.classList.contains("dark") ? "true" : "false");
   }
 
-  const themeColor = document.body.classList.contains("dark") ? "#111827" : "#2d89ef";
+  const themeColor = document.body.classList.contains("dark") ? "#111827" : "#f4f7ff";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   document.querySelector('meta[name="msapplication-navbutton-color"]')?.setAttribute("content", themeColor);
 }
@@ -3440,6 +3595,7 @@ async function loadBoreholes() {
       }
 
       boreholes = dedupeBoreholes([...boreholes, ...normalizedFirebaseBoreholes]).map(normalizeBoreholePlaceDisplay);
+      await claimExistingBoreholesForDefaultOwner();
       saveLocalBoreholes();
     } catch (e) {
       console.log("Firebase load error:", e);
