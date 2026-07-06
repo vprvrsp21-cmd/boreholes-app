@@ -184,6 +184,8 @@ let lastWeatherPoint = {
 let lastWeatherData = null;
 let lastWeatherDayIndex = 0;
 let isAdmin = false;
+let authReady = false;
+let isMapRefreshing = false;
 let accessClosed = false;
 let userLocationMarker = null;
 let installPromptEvent = null;
@@ -547,8 +549,9 @@ function getBoreholesByYear(year = activeYearFilter) {
 }
 
 function shouldShowBorehole(data) {
-  if (!isAdmin) return true;
-  return matchesYearFilter(data);
+  if (isAdmin) return matchesYearFilter(data);
+  if (!authReady && activeYearFilter !== "all") return matchesYearFilter(data);
+  return true;
 }
 
 function getSavedYearFilter() {
@@ -1031,13 +1034,32 @@ map.on("moveend zoomend", saveCurrentMapView);
 window.addEventListener("beforeunload", saveCurrentMapViewNow);
 
 async function refreshMap() {
+  if (isMapRefreshing) return;
+
+  isMapRefreshing = true;
+  const refreshButton = document.getElementById("refreshMapBtn");
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.classList.add("loading");
+  }
+
   const center = map.getCenter();
   const zoom = map.getZoom();
-  map.invalidateSize();
-  await loadPoltavaBoundary();
-  await loadBoreholes();
-  map.setView(center, zoom, { animate: false });
-  refreshWeather();
+
+  try {
+    map.invalidateSize();
+    await loadPoltavaBoundary();
+    await loadBoreholes({ renderLocal: false });
+    map.setView(center, zoom, { animate: false });
+    saveCurrentMapViewNow();
+    refreshWeather();
+  } finally {
+    isMapRefreshing = false;
+    if (refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.classList.remove("loading");
+    }
+  }
 }
 
 function locateUser() {
@@ -1258,11 +1280,13 @@ async function adminLogout() {
 
 function initAdminAuth() {
   if (!window.firebaseAuth || !window.firebaseOnAuthStateChanged) {
+    authReady = true;
     setAdminUI(null);
     return;
   }
 
   firebaseOnAuthStateChanged(firebaseAuth, user => {
+    authReady = true;
     setAdminUI(user);
     checkAppAccess();
   });
@@ -2204,6 +2228,31 @@ function editBorehole(id){
   openPanel();
 }
 
+function applyUpdatedBorehole(id, borehole, updatedData) {
+  Object.assign(borehole, normalizeBoreholePlaceDisplay({
+    ...borehole,
+    ...updatedData
+  }));
+
+  boreholes = dedupeBoreholes(boreholes).map(normalizeBoreholePlaceDisplay);
+  const updatedBorehole = boreholes.find(item => item.id === id) || borehole;
+
+  saveLocalBoreholes();
+
+  const marker = addMarker(updatedBorehole);
+  if (marker) {
+    marker.setPopupContent(getBoreholePopupHtml(updatedBorehole));
+    selectedMarker = marker;
+  }
+
+  selectedId = updatedBorehole.id || id;
+  refreshYearFilterOptions();
+  applyYearFilter();
+  renderPlaceStats(updatedBorehole);
+
+  return updatedBorehole;
+}
+
 async function updateBorehole() {
   if (!requireAdmin()) return;
 
@@ -2243,10 +2292,14 @@ async function updateBorehole() {
     updatedAt: Date.now()
   };
 
+  const boreholeId = selectedId;
+  const updatedBorehole = applyUpdatedBorehole(boreholeId, b, updatedData);
+  closePanel();
+
   try {
-    if (isFirebaseReady() && hasFirebaseId(selectedId)) {
+    if (isFirebaseReady() && hasFirebaseId(boreholeId)) {
       await firebaseUpdateDoc(
-        firebaseDoc(db, "boreholes", selectedId),
+        firebaseDoc(db, "boreholes", boreholeId),
         updatedData
       );
     }
@@ -2259,7 +2312,7 @@ async function updateBorehole() {
     saveLocalBoreholes();
     const storedMarker = getStoredMarkerForBorehole(selectedId, b);
     if (storedMarker) {
-      storedMarker.data = b;
+      Object.assign(storedMarker.data, b);
       storedMarker.marker.setIcon(createBoreholeIcon(b));
       storedMarker.marker.setPopupContent(getBoreholePopupHtml(b));
     }
@@ -2283,7 +2336,7 @@ async function updateBorehole() {
     saveLocalBoreholes();
     const storedMarker = getStoredMarkerForBorehole(selectedId, b);
     if (storedMarker) {
-      storedMarker.data = b;
+      Object.assign(storedMarker.data, b);
       storedMarker.marker.setIcon(createBoreholeIcon(b));
       storedMarker.marker.setPopupContent(getBoreholePopupHtml(b));
     }
@@ -3569,11 +3622,15 @@ async function syncNormalizedFirebaseBoreholes(originalItems, normalizedItems) {
   }
 }
 
-async function loadBoreholes() {
+async function loadBoreholes(options = {}) {
+  const renderLocal = options.renderLocal !== false;
+
   boreholes = dedupeBoreholes(loadLocalBoreholes()).map(normalizeBoreholePlaceDisplay);
-  renderBoreholeMarkers(boreholes);
-  refreshYearFilterOptions();
-  applyYearFilter();
+  if (renderLocal || !boreholeMarkers.size) {
+    renderBoreholeMarkers(boreholes);
+    refreshYearFilterOptions();
+    applyYearFilter();
+  }
 
   if (isFirebaseReady()) {
     try {
