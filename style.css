@@ -2152,6 +2152,37 @@ body.dark .estimate-pdf-btn:hover {
     width: min(218px, 78vw);
     padding-right: 8px;
     padding-left: 34px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45, 137, 239, 0.55) transparent;
+  }
+
+  #sidebar::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  #sidebar::-webkit-scrollbar-thumb {
+    background: rgba(45, 137, 239, 0.55);
+    border-radius: 999px;
+  }
+
+  .help-box {
+    margin-top: 6px;
+    padding: 6px;
+  }
+
+  .help-actions {
+    gap: 4px;
+  }
+
+  .help-action {
+    min-height: 25px;
+    padding: 4px 6px;
+    font-size: 10.5px !important;
   }
 
   .radio-group {
