@@ -2415,7 +2415,7 @@ function setTheme(isDark) {
     themeButton.setAttribute("aria-pressed", document.body.classList.contains("dark") ? "true" : "false");
   }
 
-  const themeColor = document.body.classList.contains("dark") ? "#111827" : "#f4f7ff";
+  const themeColor = document.body.classList.contains("dark") ? "#111827" : "#eaf4ff";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   document.querySelector('meta[name="msapplication-navbutton-color"]')?.setAttribute("content", themeColor);
 }
