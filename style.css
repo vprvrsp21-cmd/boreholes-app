@@ -481,6 +481,22 @@ body.dark .leaflet-popup-tip {
   cursor: pointer;
 }
 
+#locateBtn:focus,
+#refreshMapBtn:focus {
+  outline: none;
+}
+
+#locateBtn:focus-visible,
+#refreshMapBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25), 0 0 0 3px rgba(45,137,239,0.25);
+}
+
+#refreshMapBtn:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+
 .guest-mode #formPanel .btn-stack,
 .guest-mode #formPanel .admin-tools {
   display: none;
