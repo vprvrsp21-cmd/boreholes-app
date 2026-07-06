@@ -462,6 +462,9 @@ body.dark .leaflet-popup-tip {
   font-weight: 800;
   box-shadow: 0 3px 10px rgba(0,0,0,0.25);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 #refreshMapBtn {
@@ -479,11 +482,20 @@ body.dark .leaflet-popup-tip {
   font-weight: 800;
   box-shadow: 0 3px 10px rgba(0,0,0,0.25);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+#locateBtn:active,
+#refreshMapBtn:active {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #locateBtn:focus,
 #refreshMapBtn:focus {
-  outline: none;
+  outline: none !important;
 }
 
 #locateBtn:focus-visible,

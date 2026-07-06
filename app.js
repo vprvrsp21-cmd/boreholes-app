@@ -394,7 +394,7 @@ async function claimExistingBoreholesForDefaultOwner() {
 function getBoreholeMarkerColor(data) {
   const adminKey = getBoreholeAdminKey(data);
   const currentAdminEmail = getCurrentAdminEmail();
-  const primaryAdminEmail = getPrimaryAdminEmail();
+  const primaryAdminEmail = getPrimaryAdminEmail() || normalizeAdminEmail(DEFAULT_OWNER_EMAIL);
 
   if (!adminKey || adminKey === currentAdminEmail || adminKey === primaryAdminEmail) {
     return ADMIN_MARKER_COLORS[0];
