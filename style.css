@@ -18,11 +18,11 @@ body {
   overflow: hidden;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #eaf4ff;
+  background: #dceeff;
 }
 
 html {
-  background: #eaf4ff;
+  background: #dceeff;
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
@@ -33,7 +33,7 @@ html {
     right: 0;
     bottom: 0;
     height: env(safe-area-inset-bottom);
-    background: #eaf4ff;
+    background: #dceeff;
     pointer-events: none;
     z-index: 5000;
   }
@@ -48,7 +48,7 @@ html {
   left: 0;
   width: 240px;
   height: 100vh;
-  background: #f2f8ff;
+  background: #e7f3ff;
   z-index: 2000;
   padding: 8px 12px 14px 12px;
   padding-left: 38px;
@@ -100,7 +100,7 @@ html {
   top: 10px;
   right: 10px;
   width: 300px;
-  background: #f2f8ff;
+  background: #e7f3ff;
   padding: 12px;
   padding-right: 40px; /* місце під кнопку */
   z-index: 1500;
@@ -337,7 +337,15 @@ html {
    🌙 ТЕМНА ТЕМА
 ========================= */
 body.dark {
-  background: #2b3138;
+  background: #363d46;
+}
+
+html:has(body.dark) {
+  background: #363d46;
+}
+
+body.dark::after {
+  background: #363d46;
 }
 
 body.dark #sidebar {
